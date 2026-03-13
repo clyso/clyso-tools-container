@@ -10,7 +10,7 @@ output() {
     local count=$(echo "$versions" | jq 'length')
     
     [[ -n "$GITHUB_OUTPUT" ]] && {
-        echo "versions=$versions" >> "$GITHUB_OUTPUT"
+        echo "versions=$(echo "$versions" | jq -c '.')" >> "$GITHUB_OUTPUT"
         echo "count=$count" >> "$GITHUB_OUTPUT"
     }
     
