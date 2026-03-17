@@ -2,6 +2,109 @@
 
 set -e
 
+usage() {
+    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>]"
+    echo ""
+    echo "Required:"
+    echo "  -v, --version <version>    Ceph version (e.g., 18.2.7)"
+    echo ""
+    echo "Optional:"
+    echo "  -c, --config <path>        Path to ceph.conf (otherwise auto-detected)"
+    echo "  -k, --keyring <path>       Path to keyring file (otherwise auto-detected)"
+    echo "  -e, --engine <engine>      Container engine (podman or docker, auto-detected if not specified)"
+    echo "  -h, --help                 Show this help message"
+    exit 1
+}
+
+CEPH_VERSION=""
+CONFIG_FLAG=""
+KEYRING_FLAG=""
+ENGINE_FLAG=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--version)
+            CEPH_VERSION="$2"
+            shift 2
+            ;;
+        -c|--config)
+            CONFIG_FLAG="$2"
+            shift 2
+            ;;
+        -k|--keyring)
+            KEYRING_FLAG="$2"
+            shift 2
+            ;;
+        -e|--engine)
+            ENGINE_FLAG="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Error: Unknown option: $1"
+            usage
+            ;;
+    esac
+done
+
+if [ -z "${CEPH_VERSION}" ]; then
+    echo "Error: --version flag is required"
+    usage
+fi
+
+echo "=== Detecting Container Engine ==="
+CONTAINER_ENGINE=""
+
+if [ -n "${ENGINE_FLAG}" ]; then
+    if command -v "${ENGINE_FLAG}" &> /dev/null; then
+        CONTAINER_ENGINE="${ENGINE_FLAG}"
+        echo "Using specified engine: ${CONTAINER_ENGINE}"
+    else
+        echo "Error: Specified container engine '${ENGINE_FLAG}' not found"
+        exit 1
+    fi
+else
+    PODMAN_HAS_CEPH=false
+    DOCKER_HAS_CEPH=false
+    
+    if command -v podman &> /dev/null; then
+        if podman ps --format "{{.Names}}" 2>/dev/null | grep -q "^ceph-"; then
+            PODMAN_HAS_CEPH=true
+        fi
+    fi
+    
+    if command -v docker &> /dev/null; then
+        if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^ceph-"; then
+            DOCKER_HAS_CEPH=true
+        fi
+    fi
+    
+    if [ "$PODMAN_HAS_CEPH" = true ] && [ "$DOCKER_HAS_CEPH" = false ]; then
+        CONTAINER_ENGINE="podman"
+        echo "Detected Ceph containers in: podman"
+    elif [ "$DOCKER_HAS_CEPH" = true ] && [ "$PODMAN_HAS_CEPH" = false ]; then
+        CONTAINER_ENGINE="docker"
+        echo "Detected Ceph containers in: docker"
+    elif [ "$PODMAN_HAS_CEPH" = true ] && [ "$DOCKER_HAS_CEPH" = true ]; then
+        echo "Warning: Ceph containers found in both podman and docker"
+        echo "Defaulting to podman. Use --engine to specify explicitly."
+        CONTAINER_ENGINE="podman"
+    else
+        if command -v podman &> /dev/null; then
+            CONTAINER_ENGINE="podman"
+            echo "No Ceph containers detected. Using available engine: podman"
+        elif command -v docker &> /dev/null; then
+            CONTAINER_ENGINE="docker"
+            echo "No Ceph containers detected. Using available engine: docker"
+        else
+            echo "Error: No container engine found (podman or docker required)"
+            exit 1
+        fi
+    fi
+fi
+
 DATA_DIR="/var/lib/ceph"
 
 echo "=== Inferring FSID ==="
@@ -18,7 +121,15 @@ fi
 echo "=== Inferring Config ==="
 CONFIG=""
 
-if [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
+if [ -n "${CONFIG_FLAG}" ]; then
+    if [ -f "${CONFIG_FLAG}" ]; then
+        CONFIG="${CONFIG_FLAG}"
+        echo "Using provided config: ${CONFIG}"
+    else
+        echo "Error: Provided config file not found: ${CONFIG_FLAG}"
+        exit 1
+    fi
+elif [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
     CONFIG="${DATA_DIR}/${FSID}/config/ceph.conf"
     echo "Found config: ${CONFIG}"
 elif [ -f "/etc/ceph/ceph.conf" ]; then
@@ -32,7 +143,15 @@ fi
 echo "=== Inferring Keyring ==="
 KEYRING=""
 
-if [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
+if [ -n "${KEYRING_FLAG}" ]; then
+    if [ -f "${KEYRING_FLAG}" ]; then
+        KEYRING="${KEYRING_FLAG}"
+        echo "Using provided keyring: ${KEYRING}"
+    else
+        echo "Error: Provided keyring file not found: ${KEYRING_FLAG}"
+        exit 1
+    fi
+elif [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
     KEYRING="${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring"
     echo "Found keyring: ${KEYRING}"
 elif [ -f "/etc/ceph/ceph.client.admin.keyring" ]; then
@@ -43,80 +162,19 @@ else
     exit 1
 fi
 
-echo "=== Detecting Ceph Version ==="
-
-if [ -n "${CEPH_VERSION}" ]; then
-    echo "Using provided CEPH_VERSION: ${CEPH_VERSION}"
-else
-    if [ -n "${CEPHADM_IMAGE}" ]; then
-        RUNNING_IMAGE="${CEPHADM_IMAGE}"
-    else
-        RUNNING_IMAGE=$(podman ps --format "{{.Names}}\t{{.Image}}" | grep -E "^ceph-.*-(mon|mgr|osd|mds|rgw)-" | head -1 | awk '{print $2}' || true)
-
-        if [ -z "${RUNNING_IMAGE}" ]; then
-            RUNNING_IMAGE=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep "quay.io/ceph/ceph:v" | head -1 || true)
-        fi
-    fi
-
-    if [ -n "${RUNNING_IMAGE}" ]; then
-        CEPH_VERSION=$(podman inspect "${RUNNING_IMAGE}" --format '{{.RepoTags}}' 2>/dev/null | grep -oP 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/^v//' | head -1 || true)
-        
-        if [ -z "${CEPH_VERSION}" ]; then
-            CEPH_VERSION=$(echo "${RUNNING_IMAGE}" | grep -oP 'v[0-9]+\.[0-9]+\.[0-9]+' | sed 's/^v//' || true)
-        fi
-        
-        if [ -n "${CEPH_VERSION}" ] && [[ "${CEPH_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Detected from cephadm container: ${CEPH_VERSION}"
-        else
-            CEPH_VERSION=""
-        fi
-    fi
-
-    if [ -z "${CEPH_VERSION}" ] && command -v ceph &> /dev/null; then
-        CEPH_VERSION=$(ceph version 2>/dev/null | grep -oP 'ceph version \K[0-9]+\.[0-9]+\.[0-9]+' || true)
-        if [ -n "${CEPH_VERSION}" ] && [[ "${CEPH_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Detected from ceph CLI: ${CEPH_VERSION}"
-        else
-            CEPH_VERSION=""
-        fi
-    fi
-
-    if [ -z "${CEPH_VERSION}" ] && command -v rpm &> /dev/null; then
-        CEPH_VERSION=$(rpm -q ceph-common --queryformat '%{VERSION}' 2>/dev/null || true)
-        if [ -n "${CEPH_VERSION}" ] && [ "${CEPH_VERSION}" != "package ceph-common is not installed" ] && [[ "${CEPH_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Detected from RPM package: ${CEPH_VERSION}"
-        else
-            CEPH_VERSION=""
-        fi
-    fi
-
-    if [ -z "${CEPH_VERSION}" ] && command -v dpkg &> /dev/null; then
-        CEPH_VERSION=$(dpkg -s ceph-common 2>/dev/null | grep '^Version:' | awk '{print $2}' | cut -d'-' -f1 || true)
-        if [ -n "${CEPH_VERSION}" ] && [[ "${CEPH_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Detected from DEB package: ${CEPH_VERSION}"
-        else
-            CEPH_VERSION=""
-        fi
-    fi
-fi
-
-if [ -z "${CEPH_VERSION}" ]; then
-    echo "Error: Could not detect Ceph version"
-    echo "Please set CEPH_VERSION environment variable:"
-    echo "  CEPH_VERSION=18.2.7 $0"
-    exit 1
-fi
+echo "=== Using Ceph Version ==="
+echo "Ceph version: ${CEPH_VERSION}"
 
 IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
 
-echo "FSID:    ${FSID}"
-echo "Config:  ${CONFIG}"
-echo "Keyring: ${KEYRING}"
-echo "Image:   ${IMAGE}"
-echo "O8 Binary:  ${O8_BINARY_PATH}"
+echo "Container Engine: ${CONTAINER_ENGINE}"
+echo "FSID:            ${FSID}"
+echo "Config:          ${CONFIG}"
+echo "Keyring:         ${KEYRING}"
+echo "Image:           ${IMAGE}"
 echo ""
 
-PODMAN_CMD="podman run -it --rm \
+CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
   --name clyso-tools \
   --net=host \
   -e CONTAINER_IMAGE=${IMAGE} \
@@ -124,6 +182,7 @@ PODMAN_CMD="podman run -it --rm \
   -e LANG=C \
   -v ${CONFIG}:/etc/ceph/ceph.conf:z \
   -v ${KEYRING}:/etc/ceph/ceph.keyring:z \
+  -v /:/rootfs:ro \
   ${IMAGE} bash"
 
-eval ${PODMAN_CMD}
+eval ${CONTAINER_CMD}
