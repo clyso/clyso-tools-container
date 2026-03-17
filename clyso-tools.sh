@@ -12,6 +12,7 @@ usage() {
     echo "  -c, --config <path>        Path to ceph.conf (otherwise auto-detected)"
     echo "  -k, --keyring <path>       Path to keyring file (otherwise auto-detected)"
     echo "  -e, --engine <engine>      Container engine (podman or docker, auto-detected if not specified)"
+    echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, SYS_ADMIN, seccomp=unconfined)"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
@@ -20,6 +21,7 @@ CEPH_VERSION=""
 CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
+DEBUG_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -38,6 +40,10 @@ while [[ $# -gt 0 ]]; do
         -e|--engine)
             ENGINE_FLAG="$2"
             shift 2
+            ;;
+        -d|--debug)
+            DEBUG_MODE=true
+            shift
             ;;
         -h|--help)
             usage
@@ -174,9 +180,22 @@ echo "Keyring:         ${KEYRING}"
 echo "Image:           ${IMAGE}"
 echo ""
 
+DEBUG_FLAGS=""
+if [ "${DEBUG_MODE}" = true ]; then
+    echo "=== Debug Mode Enabled ==="
+    echo "  --pid=host (host PID namespace)"
+    echo "  --cap-add=SYS_PTRACE (ptrace access)"
+    echo "  --cap-add=SYS_ADMIN (nsenter access)"
+    echo "  --security-opt seccomp=unconfined"
+    echo "  --security-opt apparmor=unconfined"
+    echo ""
+    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
+fi
+
 CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
   --name clyso-tools \
   --net=host \
+  ${DEBUG_FLAGS} \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
