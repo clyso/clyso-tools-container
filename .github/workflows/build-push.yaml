@@ -7,6 +7,13 @@ on:
       paths:
         - 'versions.yaml'
         - 'Dockerfile'
+    workflow_call:
+      inputs:
+        triggered_by:
+          description: 'Tool that triggered the rebuild (o8/otto)'
+          required: false
+          type: string
+    workflow_dispatch:
     
 concurrency:
   group: build-images
@@ -58,7 +65,15 @@ jobs:
         run: |
           VERSION="${{ matrix.version }}"
           
+          # Force fresh tool downloads when triggered externally
+          CACHE_FLAG=""
+          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            CACHE_FLAG="--no-cache"
+            echo "External trigger detected (triggered by: ${{ inputs.triggered_by }}) - forcing fresh build without cache"
+          fi
+          
           docker buildx build \
+            ${CACHE_FLAG} \
             --build-arg CEPH_TAG=${VERSION} \
             --build-arg OTTO_VERSION=latest \
             --build-arg O8_VERSION=latest \

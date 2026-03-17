@@ -19,6 +19,12 @@ output() {
 
 CURRENT=$(get_versions versions.yaml)
 
+if [[ "${GITHUB_EVENT_NAME}" == "workflow_call" ]]; then
+    echo "Triggered by external workflow - rebuilding all versions" >&2
+    output "$CURRENT"
+    exit 0
+fi
+
 if git diff HEAD~1 HEAD --name-only | grep -q "^Dockerfile$"; then
     echo "Dockerfile changed - rebuilding all" >&2
     output "$CURRENT"
