@@ -175,7 +175,7 @@ echo "Image:           ${IMAGE}"
 echo ""
 
 CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
-  --name clyso-tools \
+  --name clyso-tools-$$ \
   --net=host \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
