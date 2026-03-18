@@ -13,6 +13,7 @@ usage() {
     echo "  -k, --keyring <path>       Path to keyring file (otherwise auto-detected)"
     echo "  -e, --engine <engine>      Container engine (podman or docker, auto-detected if not specified)"
     echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, seccomp=unconfined)"
+    echo "  -p, --pull                 Pull the latest image before running"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
@@ -22,6 +23,7 @@ CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
 DEBUG_MODE=false
+PULL_MODE=false
 COMMAND_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -44,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--debug)
             DEBUG_MODE=true
+            shift
+            ;;
+        -p|--pull)
+            PULL_MODE=true
             shift
             ;;
         -h|--help)
@@ -186,6 +192,11 @@ if [ "${DEBUG_MODE}" = true ]; then
     DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
 fi
 
+PULL_FLAGS=""
+if [ "${PULL_MODE}" = true ]; then
+    PULL_FLAGS="--pull=always"
+fi
+
 if [ ${#COMMAND_ARGS[@]} -gt 0 ]; then
     INTERACTIVE_FLAGS=""
     ENTRYPOINT="--entrypoint ${COMMAND_ARGS[0]}"
@@ -200,6 +211,7 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   --name clyso-tools \
   --net=host \
   ${DEBUG_FLAGS} \
+  ${PULL_FLAGS} \
   ${ENTRYPOINT} \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
