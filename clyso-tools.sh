@@ -12,7 +12,7 @@ usage() {
     echo "  -c, --config <path>        Path to ceph.conf (otherwise auto-detected)"
     echo "  -k, --keyring <path>       Path to keyring file (otherwise auto-detected)"
     echo "  -e, --engine <engine>      Container engine (podman or docker, auto-detected if not specified)"
-    echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, SYS_ADMIN, seccomp=unconfined)"
+    echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, seccomp=unconfined)"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
@@ -182,14 +182,7 @@ echo ""
 
 DEBUG_FLAGS=""
 if [ "${DEBUG_MODE}" = true ]; then
-    echo "=== Debug Mode Enabled ==="
-    echo "  --pid=host (host PID namespace)"
-    echo "  --cap-add=SYS_PTRACE (ptrace access)"
-    echo "  --cap-add=SYS_ADMIN (nsenter access)"
-    echo "  --security-opt seccomp=unconfined"
-    echo "  --security-opt apparmor=unconfined"
-    echo ""
-    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --cap-add=SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
+    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
 fi
 
 CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
