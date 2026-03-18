@@ -32,7 +32,7 @@ RUN dnf install -y \
       libtool \
     && dnf clean all
 
-RUN git clone https://github.com/JoshuaGabriel/uwpmp.git /tmp/uwpmp \
+RUN git clone https://github.com/markhpc/uwpmp.git /tmp/uwpmp \
     && cd /tmp/uwpmp \
     && mkdir build \
     && cd build \
