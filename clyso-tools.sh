@@ -179,11 +179,6 @@ fi
 echo "Ceph version: ${CEPH_VERSION}"
 
 IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
-
-echo "Container Engine: ${CONTAINER_ENGINE}"
-echo "FSID:            ${FSID}"
-echo "Config:          ${CONFIG}"
-echo "Keyring:         ${KEYRING}"
 echo "Image:           ${IMAGE}"
 echo ""
 
