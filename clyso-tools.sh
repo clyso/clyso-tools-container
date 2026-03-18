@@ -3,7 +3,7 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>]"
+    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
     echo ""
     echo "Required:"
     echo "  -v, --version <version>    Ceph version (e.g., 18.2.7)"
@@ -22,6 +22,7 @@ CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
 DEBUG_MODE=false
+COMMAND_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -47,6 +48,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         -h|--help)
             usage
+            ;;
+        --)
+            shift
+            COMMAND_ARGS=("$@")
+            break
             ;;
         *)
             echo "Error: Unknown option: $1"
@@ -185,16 +191,27 @@ if [ "${DEBUG_MODE}" = true ]; then
     DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
 fi
 
-CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
-  --name clyso-tools-$$ \
+if [ ${#COMMAND_ARGS[@]} -gt 0 ]; then
+    INTERACTIVE_FLAGS=""
+    ENTRYPOINT="--entrypoint ${COMMAND_ARGS[0]}"
+    TRAILING_ARGS="${COMMAND_ARGS[@]:1}"
+else
+    INTERACTIVE_FLAGS="-it"
+    ENTRYPOINT="--entrypoint bash"
+    TRAILING_ARGS=""
+fi
+
+CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
+  --name clyso-tools \
   --net=host \
   ${DEBUG_FLAGS} \
+  ${ENTRYPOINT} \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
   -v ${CONFIG}:/etc/ceph/ceph.conf:z \
   -v ${KEYRING}:/etc/ceph/ceph.keyring:z \
   -v /:/rootfs:ro \
-  ${IMAGE} bash"
+  ${IMAGE} ${TRAILING_ARGS}"
 
 eval ${CONTAINER_CMD}
