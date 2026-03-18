@@ -19,7 +19,7 @@ output() {
 
 CURRENT=$(get_versions versions.yaml)
 
-if [[ "${GITHUB_EVENT_NAME}" == "workflow_call" ]]; then
+if [[ "${GITHUB_EVENT_NAME}" == "repository_dispatch" ]]; then
     echo "Triggered by external workflow - rebuilding all versions" >&2
     output "$CURRENT"
     exit 0

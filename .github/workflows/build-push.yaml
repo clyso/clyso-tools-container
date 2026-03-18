@@ -7,12 +7,8 @@ on:
       paths:
         - 'versions.yaml'
         - 'Dockerfile'
-    workflow_call:
-      inputs:
-        triggered_by:
-          description: 'Tool that triggered the rebuild (o8/otto)'
-          required: false
-          type: string
+    repository_dispatch:
+      types: [binary_released]
     workflow_dispatch:
     
 concurrency:
@@ -67,9 +63,9 @@ jobs:
           
           # Force fresh tool downloads when triggered externally
           CACHE_FLAG=""
-          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
             CACHE_FLAG="--no-cache"
-            echo "External trigger detected (triggered by: ${{ inputs.triggered_by }}) - forcing fresh build without cache"
+            echo "External trigger detected (triggered by: ${{ github.event.client_payload.tool }}) - forcing fresh build without cache"
           fi
           
           docker buildx build \
