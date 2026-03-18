@@ -66,7 +66,6 @@ if [ -z "${CEPH_VERSION}" ]; then
     usage
 fi
 
-echo "=== Detecting Container Engine ==="
 CONTAINER_ENGINE=""
 
 if [ -n "${ENGINE_FLAG}" ]; then
@@ -119,7 +118,6 @@ fi
 
 DATA_DIR="/var/lib/ceph"
 
-echo "=== Inferring FSID ==="
 FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename || true))
 
 if [ ${#FSIDS[@]} -eq 0 ]; then
@@ -130,7 +128,6 @@ else
     echo "Inferred FSID: ${FSID}"
 fi
 
-echo "=== Inferring Config ==="
 CONFIG=""
 
 if [ -n "${CONFIG_FLAG}" ]; then
@@ -152,7 +149,6 @@ else
     exit 1
 fi
 
-echo "=== Inferring Keyring ==="
 KEYRING=""
 
 if [ -n "${KEYRING_FLAG}" ]; then
@@ -174,7 +170,6 @@ else
     exit 1
 fi
 
-echo "=== Using Ceph Version ==="
 echo "Ceph version: ${CEPH_VERSION}"
 
 IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
