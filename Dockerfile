@@ -40,6 +40,7 @@ RUN git clone https://github.com/markhpc/uwpmp.git /tmp/uwpmp \
     && make
 
 FROM ${CEPH_IMG}:${CEPH_TAG}
+LABEL ceph="" # cephadm shell picks images based on this flag, removing this helps cephadm not get confused to use this image
 
 RUN dnf install -y \
       elfutils-libs \
