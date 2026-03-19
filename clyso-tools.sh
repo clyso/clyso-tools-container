@@ -182,9 +182,10 @@ IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
 echo "Image:           ${IMAGE}"
 echo ""
 
+# --security-opt apparmor=unconfined is needed for OSDs processes with unwindpmp
 DEBUG_FLAGS=""
 if [ "${DEBUG_MODE}" = true ]; then
-    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
+    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
 fi
 
 PULL_FLAGS=""
