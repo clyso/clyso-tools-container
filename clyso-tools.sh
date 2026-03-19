@@ -3,7 +3,7 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>]"
+    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
     echo ""
     echo "Required:"
     echo "  -v, --version <version>    Ceph version (e.g., 18.2.7)"
@@ -13,6 +13,7 @@ usage() {
     echo "  -k, --keyring <path>       Path to keyring file (otherwise auto-detected)"
     echo "  -e, --engine <engine>      Container engine (podman or docker, auto-detected if not specified)"
     echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, seccomp=unconfined)"
+    echo "  -p, --pull                 Pull the latest image before running"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
@@ -22,6 +23,8 @@ CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
 DEBUG_MODE=false
+PULL_MODE=false
+COMMAND_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -45,8 +48,17 @@ while [[ $# -gt 0 ]]; do
             DEBUG_MODE=true
             shift
             ;;
+        -p|--pull)
+            PULL_MODE=true
+            shift
+            ;;
         -h|--help)
             usage
+            ;;
+        --)
+            shift
+            COMMAND_ARGS=("$@")
+            break
             ;;
         *)
             echo "Error: Unknown option: $1"
@@ -60,7 +72,6 @@ if [ -z "${CEPH_VERSION}" ]; then
     usage
 fi
 
-echo "=== Detecting Container Engine ==="
 CONTAINER_ENGINE=""
 
 if [ -n "${ENGINE_FLAG}" ]; then
@@ -113,7 +124,6 @@ fi
 
 DATA_DIR="/var/lib/ceph"
 
-echo "=== Inferring FSID ==="
 FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename || true))
 
 if [ ${#FSIDS[@]} -eq 0 ]; then
@@ -124,7 +134,6 @@ else
     echo "Inferred FSID: ${FSID}"
 fi
 
-echo "=== Inferring Config ==="
 CONFIG=""
 
 if [ -n "${CONFIG_FLAG}" ]; then
@@ -146,7 +155,6 @@ else
     exit 1
 fi
 
-echo "=== Inferring Keyring ==="
 KEYRING=""
 
 if [ -n "${KEYRING_FLAG}" ]; then
@@ -168,33 +176,45 @@ else
     exit 1
 fi
 
-echo "=== Using Ceph Version ==="
 echo "Ceph version: ${CEPH_VERSION}"
 
 IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
-
-echo "Container Engine: ${CONTAINER_ENGINE}"
-echo "FSID:            ${FSID}"
-echo "Config:          ${CONFIG}"
-echo "Keyring:         ${KEYRING}"
 echo "Image:           ${IMAGE}"
 echo ""
 
+# --security-opt apparmor=unconfined is needed for OSDs processes with unwindpmp
 DEBUG_FLAGS=""
 if [ "${DEBUG_MODE}" = true ]; then
-    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined"
+    DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
 fi
 
-CONTAINER_CMD="${CONTAINER_ENGINE} run -it --rm \
-  --name clyso-tools-$$ \
+PULL_FLAGS=""
+if [ "${PULL_MODE}" = true ]; then
+    PULL_FLAGS="--pull=always"
+fi
+
+if [ ${#COMMAND_ARGS[@]} -gt 0 ]; then
+    INTERACTIVE_FLAGS=""
+    ENTRYPOINT="--entrypoint ${COMMAND_ARGS[0]}"
+    TRAILING_ARGS="${COMMAND_ARGS[@]:1}"
+else
+    INTERACTIVE_FLAGS="-it"
+    ENTRYPOINT="--entrypoint bash"
+    TRAILING_ARGS=""
+fi
+
+CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
+  --name clyso-tools \
   --net=host \
   ${DEBUG_FLAGS} \
+  ${PULL_FLAGS} \
+  ${ENTRYPOINT} \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
   -v ${CONFIG}:/etc/ceph/ceph.conf:z \
   -v ${KEYRING}:/etc/ceph/ceph.keyring:z \
   -v /:/rootfs:ro \
-  ${IMAGE} bash"
+  ${IMAGE} ${TRAILING_ARGS}"
 
 eval ${CONTAINER_CMD}
