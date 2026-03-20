@@ -214,7 +214,7 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   -e LANG=C \
   -v ${CONFIG}:/etc/ceph/ceph.conf:z \
   -v ${KEYRING}:/etc/ceph/ceph.keyring:z \
-  -v /:/rootfs:ro \
+  -v /:/rootfs:z \
   ${IMAGE} ${TRAILING_ARGS}"
 
 eval ${CONTAINER_CMD}
