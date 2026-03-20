@@ -204,7 +204,7 @@ else
 fi
 
 CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
-  --name clyso-tools \
+  --name clyso-tools-$$ \
   --net=host \
   ${DEBUG_FLAGS} \
   ${PULL_FLAGS} \
