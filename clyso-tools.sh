@@ -178,7 +178,7 @@ fi
 
 echo "Ceph version: ${CEPH_VERSION}"
 
-IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
+IMAGE="harbor.clyso.com/clyso-tools/clyso-tools-test:${CEPH_VERSION}"
 echo "Image:           ${IMAGE}"
 echo ""
 

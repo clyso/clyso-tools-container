@@ -4,6 +4,7 @@ on:
     push:
       branches:
         - main
+        - dwarf
       paths:
         - 'versions.yaml'
         - 'Dockerfile'
@@ -61,6 +62,14 @@ jobs:
         run: |
           VERSION="${{ matrix.version }}"
           
+          # Determine image repository based on branch
+          if [[ "${{ github.ref }}" == "refs/heads/dwarf" ]]; then
+            IMAGE_REPO="harbor.clyso.com/clyso-tools/clyso-tools-test"
+            echo "Building test image for dwarf branch"
+          else
+            IMAGE_REPO="harbor.clyso.com/clyso-tools/clyso-tools"
+          fi
+          
           # Force fresh tool downloads when triggered externally
           CACHE_FLAG=""
           if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
@@ -68,11 +77,13 @@ jobs:
             echo "External trigger detected (triggered by: ${{ github.event.client_payload.tool }}) - forcing fresh build without cache"
           fi
           
+          echo "Building image: ${IMAGE_REPO}:${VERSION#v}"
+          
           docker buildx build \
             ${CACHE_FLAG} \
             --build-arg CEPH_TAG=${VERSION} \
             --build-arg OTTO_VERSION=latest \
             --build-arg O8_VERSION=latest \
-            -t harbor.clyso.com/clyso-tools/clyso-tools:${VERSION#v} \
+            -t ${IMAGE_REPO}:${VERSION#v} \
             --push \
             .
