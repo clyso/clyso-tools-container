@@ -39,6 +39,40 @@ RUN git clone https://github.com/markhpc/uwpmp.git /tmp/uwpmp \
     && cmake .. \
     && make
 
+FROM ${CEPH_IMG}:${CEPH_TAG} AS cephtrace-builder
+
+RUN dnf install -y \
+      git \
+      gcc \
+      gcc-c++ \
+      clang \
+      make \
+      elfutils-libelf-devel \
+      elfutils-devel \
+      glibc-devel \
+      glibc-devel.i686 \
+    && dnf clean all
+
+RUN git clone https://github.com/taodd/cephtrace.git /tmp/cephtrace && \
+    cd /tmp/cephtrace && \
+    git submodule update --init --recursive && \
+    make -j $(nproc) osdtrace radostrace
+
+RUN cd /tmp && \
+    CEPH_VERSION=$(rpm -q ceph-osd --queryformat '%{VERSION}-%{RELEASE}') && \
+    dnf install -y \
+      https://download.ceph.com/rpm-${CEPH_VERSION%-*}/el9/x86_64/ceph-debuginfo-${CEPH_VERSION}.x86_64.rpm \
+      https://download.ceph.com/rpm-${CEPH_VERSION%-*}/el9/x86_64/ceph-osd-debuginfo-${CEPH_VERSION}.x86_64.rpm \
+      https://download.ceph.com/rpm-${CEPH_VERSION%-*}/el9/x86_64/librados2-debuginfo-${CEPH_VERSION}.x86_64.rpm \
+      https://download.ceph.com/rpm-${CEPH_VERSION%-*}/el9/x86_64/librbd1-debuginfo-${CEPH_VERSION}.x86_64.rpm \
+    && dnf clean all
+
+RUN cd /tmp/cephtrace && \
+    CEPH_FULL_VERSION=$(rpm -q ceph-osd --queryformat '%{EPOCH}:%{VERSION}-%{RELEASE}') && \
+    ./osdtrace -j /tmp/osdtrace-dwarf.json && \
+    ./radostrace -j /tmp/radostrace-dwarf.json && \
+    ls -lh /tmp/*-dwarf.json
+
 FROM ${CEPH_IMG}:${CEPH_TAG}
 # cephadm shell picks images based on this flag, removing this helps cephadm not get confused to use this image
 LABEL ceph="" 
@@ -56,9 +90,17 @@ RUN dnf install -y \
       util-linux \
       procps-ng \
       iproute \
+      fio \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
 COPY --from=otto-fetcher /tmp/otto /usr/local/bin/otto
 COPY --from=o8-fetcher /tmp/o8 /usr/local/bin/o8
 COPY --from=uwpmp-builder /tmp/uwpmp/build/unwindpmp /usr/local/bin/unwindpmp
+
+COPY --from=cephtrace-builder /tmp/cephtrace/osdtrace /usr/local/bin/osdtrace
+COPY --from=cephtrace-builder /tmp/cephtrace/radostrace /usr/local/bin/radostrace
+
+RUN mkdir -p /usr/local/share/cephtrace
+COPY --from=cephtrace-builder /tmp/osdtrace-dwarf.json /usr/local/share/cephtrace/
+COPY --from=cephtrace-builder /tmp/radostrace-dwarf.json /usr/local/share/cephtrace/
