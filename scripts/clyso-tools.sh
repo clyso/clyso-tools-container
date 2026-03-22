@@ -18,6 +18,98 @@ usage() {
     exit 1
 }
 
+check_cosign() {
+    if command -v cosign &> /dev/null; then
+        return 0
+    fi
+    
+    echo "Cosign not found. Installing..."
+    
+    # Detect architecture
+    local arch=$(uname -m)
+    local cosign_arch
+    case $arch in
+        x86_64)
+            cosign_arch="amd64"
+            ;;
+        aarch64|arm64)
+            cosign_arch="arm64"
+            ;;
+        *)
+            echo "Error: Unsupported architecture: $arch"
+            echo "Cosign is only auto-installed for x86_64 and arm64."
+            echo "Please install manually: https://github.com/sigstore/cosign/releases"
+            return 1
+            ;;
+    esac
+    
+    local temp_dir=$(mktemp -d)
+    local base_url="https://github.com/sigstore/cosign/releases/latest/download"
+    local binary_name="cosign-linux-${cosign_arch}"
+    
+    # Download checksums and binary
+    if ! curl -fsSL "${base_url}/cosign_checksums.txt" -o "${temp_dir}/checksums.txt"; then
+        echo "Error: Failed to download checksums"
+        rm -rf "${temp_dir}"
+        return 1
+    fi
+    
+    if ! curl -fsSL "${base_url}/${binary_name}" -o "${temp_dir}/cosign"; then
+        echo "Error: Failed to download cosign"
+        rm -rf "${temp_dir}"
+        return 1
+    fi
+    
+    # Verify checksum
+    local expected=$(grep "${binary_name}" "${temp_dir}/checksums.txt" | awk '{print $1}')
+    local actual=$(sha256sum "${temp_dir}/cosign" | awk '{print $1}')
+    
+    if [ "$expected" != "$actual" ]; then
+        echo "Error: Checksum verification failed"
+        echo "Expected: $expected"
+        echo "Got:      $actual"
+        rm -rf "${temp_dir}"
+        return 1
+    fi
+    
+    echo "Checksum verified"
+    chmod +x "${temp_dir}/cosign"
+    
+    if mkdir -p "$HOME/.local/bin" 2>/dev/null && cp "${temp_dir}/cosign" "$HOME/.local/bin/cosign" 2>/dev/null; then
+        export PATH="$HOME/.local/bin:$PATH"
+        echo "Cosign installed to $HOME/.local/bin/cosign"
+        rm -rf "${temp_dir}"
+        return 0
+    fi
+    
+    if sudo install "${temp_dir}/cosign" /usr/local/bin/cosign 2>/dev/null; then
+        echo "Cosign installed to /usr/local/bin/cosign"
+        rm -rf "${temp_dir}"
+        return 0
+    fi
+    
+    echo "Error: Failed to install cosign"
+    rm -rf "${temp_dir}"
+    return 1
+}
+
+verify_image_signature() {
+    local image=$1
+    
+    echo "Verifying image signature: ${image}"
+    
+    if cosign verify "${image}" \
+        --certificate-identity-regexp="https://github.com/clyso/clyso-tools-build" \
+        --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+        > /dev/null 2>&1; then
+        echo "Image signature verified"
+        return 0
+    else
+        echo "Image signature verification FAILED"
+        return 1
+    fi
+}
+
 CEPH_VERSION=""
 CONFIG_FLAG=""
 KEYRING_FLAG=""
@@ -188,9 +280,11 @@ if [ "${DEBUG_MODE}" = true ]; then
     DEBUG_FLAGS="--pid=host --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
 fi
 
-PULL_FLAGS=""
 if [ "${PULL_MODE}" = true ]; then
-    PULL_FLAGS="--pull=always"
+    ${CONTAINER_ENGINE} pull "${IMAGE}" || exit 1
+    
+    check_cosign || exit 1
+    verify_image_signature "${IMAGE}" || exit 1
 fi
 
 if [ ${#COMMAND_ARGS[@]} -gt 0 ]; then
@@ -207,7 +301,6 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   --name clyso-tools \
   --net=host \
   ${DEBUG_FLAGS} \
-  ${PULL_FLAGS} \
   ${ENTRYPOINT} \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
