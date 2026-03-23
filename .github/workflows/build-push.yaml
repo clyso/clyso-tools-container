@@ -65,6 +65,7 @@ jobs:
             -u "${{ secrets.HARBOR_USERNAME }}" --password-stdin
       
       - name: Build and push
+        id: build-push
         run: |
           VERSION="${{ matrix.version }}"
           
