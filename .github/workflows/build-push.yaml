@@ -10,6 +10,10 @@ on:
     repository_dispatch:
       types: [binary_released]
     workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
     
 concurrency:
   group: build-images
@@ -51,6 +55,9 @@ jobs:
       
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
       
       - name: Login to Harbor
         run: |
@@ -58,6 +65,7 @@ jobs:
             -u "${{ secrets.HARBOR_USERNAME }}" --password-stdin
       
       - name: Build and push
+        id: build-push
         run: |
           VERSION="${{ matrix.version }}"
           
@@ -67,12 +75,47 @@ jobs:
             CACHE_FLAG="--no-cache"
             echo "External trigger detected (triggered by: ${{ github.event.client_payload.tool }}) - forcing fresh build without cache"
           fi
+
+          IMAGE_TAG="harbor.clyso.com/clyso-tools/clyso-tools:${VERSION#v}"
+          echo "Building and pushing: ${IMAGE_TAG}"
           
           docker buildx build \
             ${CACHE_FLAG} \
             --build-arg CEPH_TAG=${VERSION} \
             --build-arg OTTO_VERSION=latest \
             --build-arg O8_VERSION=latest \
-            -t harbor.clyso.com/clyso-tools/clyso-tools:${VERSION#v} \
+            -t ${IMAGE_TAG} \
+            --metadata-file metadata.json \
             --push \
             .
+
+          DIGEST=$(jq -r '."containerimage.digest"' metadata.json)
+          IMAGE_DIGEST="harbor.clyso.com/clyso-tools/clyso-tools@${DIGEST}"
+          
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "image_digest=${IMAGE_DIGEST}" >> $GITHUB_OUTPUT
+
+      - name: Sign image with Cosign
+        env:
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.image_digest }}
+          IMAGE_TAG: ${{ steps.build-push.outputs.image_tag }}
+        run: |
+          echo "Signing image:"
+          echo "  Tag:    ${IMAGE_TAG}"
+          echo "  Digest: ${IMAGE_DIGEST}"
+          echo ""
+          
+          cosign sign --yes ${IMAGE_DIGEST}
+          echo "Image signed successfully"
+
+      - name: Verify image signature
+        env:
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.image_digest }}
+        run: |
+          echo "Verifying signature for: ${IMAGE_DIGEST}"
+          
+          cosign verify ${IMAGE_DIGEST} \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+          
+          echo "Signature verified successfully"

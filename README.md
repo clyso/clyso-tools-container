@@ -61,7 +61,47 @@ Usage:
 
 ```
 
-extra packages
+### cephtrace - eBPF Tracing Tools
+
+The container includes [cephtrace](https://github.com/taodd/cephtrace) - a suite of eBPF-based dynamic tracing tools for Ceph. These tools provide microsecond-level visibility into your Ceph cluster's performance.
+
+**Available tools:**
+- **osdtrace** - Trace OSD operations with detailed latency breakdown
+- **radostrace** - Trace librados client operations in real-time (RGW, QEMU/KVM VMs, userspace RBD)
+
+**Pre-compiled DWARF files** are included at:
+- `/usr/local/share/cephtrace/osdtrace-dwarf.json`
+- `/usr/local/share/cephtrace/radostrace-dwarf.json`
+
+These DWARF files are pre-generated for the specific Ceph version in the container, so you can start tracing immediately without needing debug symbols.
+
+#### Example: Trace OSD operations
+
+```bash
+# Start container in debug mode (required for tracing)
+./clyso-tools.sh --version 20.2.0 --debug
+
+# Inside container, find OSD process on host
+ps aux | grep ceph-osd
+
+osdtrace -i /usr/local/share/cephtrace/osdtrace-dwarf.json -p <osd-pid> -x --skip-version-check
+```
+
+#### Example: Trace client operations
+
+```bash
+# Find client process (e.g., radosgw)
+ps aux | grep radosgw
+radostrace -i /usr/local/share/cephtrace/radostrace-dwarf.json -p <radosgw-pid> --skip-version-check
+
+# For QEMU/KVM VMs (userspace RBD):
+ps aux | grep qemu
+radostrace -i /usr/local/share/cephtrace/radostrace-dwarf.json -p <qemu-pid> --skip-version-check
+```
+
+**For more information and detailed documentation**, see the [cephtrace GitHub repository](https://github.com/taodd/cephtrace).
+
+### extra packages
 
 ```
  elfutils-libs \
@@ -76,4 +116,5 @@ extra packages
  util-linux \
  procps-ng \
  iproute \
+ fio \
 ```
