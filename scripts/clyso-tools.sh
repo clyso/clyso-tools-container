@@ -124,15 +124,15 @@ else
 fi
 
 DATA_DIR="/var/lib/ceph"
+FSID=""
 
-FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename || true))
+FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename 2>/dev/null || true))
 
-if [ ${#FSIDS[@]} -eq 0 ]; then
-    echo "Error: No FSID found in ${DATA_DIR}"
-    exit 1
-else
+if [ ${#FSIDS[@]} -gt 0 ]; then
     FSID="${FSIDS[0]}"
     echo "Inferred FSID: ${FSID}"
+else
+    echo "No FSID found in ${DATA_DIR}"
 fi
 
 CONFIG=""
@@ -145,7 +145,7 @@ if [ -n "${CONFIG_FLAG}" ]; then
         echo "Error: Provided config file not found: ${CONFIG_FLAG}"
         exit 1
     fi
-elif [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
+elif [ -n "${FSID}" ] && [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
     CONFIG="${DATA_DIR}/${FSID}/config/ceph.conf"
     echo "Found config: ${CONFIG}"
 elif [ -f "/etc/ceph/ceph.conf" ]; then
@@ -172,7 +172,7 @@ if [ -n "${KEYRING_FLAG}" ]; then
         echo "Error: Provided keyring file not found: ${KEYRING_FLAG}"
         exit 1
     fi
-elif [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
+elif [ -n "${FSID}" ] && [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
     KEYRING="${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring"
     echo "Found keyring: ${KEYRING}"
 elif [ -f "/etc/ceph/ceph.client.admin.keyring" ]; then
