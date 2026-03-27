@@ -15,6 +15,7 @@ usage() {
     echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, SYS_ADMIN, seccomp=unconfined)"
     echo "                             Required for tracing operations (osdtrace, radostrace) on non-admin nodes"
     echo "  -p, --pull                 Pull the latest image before running"
+    echo "  -n, --dry-run              Print the container run command without executing it"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
@@ -25,6 +26,7 @@ KEYRING_FLAG=""
 ENGINE_FLAG=""
 DEBUG_MODE=false
 PULL_MODE=false
+DRY_RUN=false
 COMMAND_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -51,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -p|--pull)
             PULL_MODE=true
+            shift
+            ;;
+        -n|--dry-run)
+            DRY_RUN=true
             shift
             ;;
         -h|--help)
@@ -236,4 +242,8 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   -v /:/rootfs:z \
   ${IMAGE} ${TRAILING_ARGS}"
 
-eval ${CONTAINER_CMD}
+if [ "${DRY_RUN}" = true ]; then
+    echo "${CONTAINER_CMD}"
+else
+    eval ${CONTAINER_CMD}
+fi
