@@ -233,7 +233,7 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
   ${VOLUME_MOUNTS} \
-  -v /:/rootfs:ro \
+  -v /:/rootfs:z \
   ${IMAGE} ${TRAILING_ARGS}"
 
 eval ${CONTAINER_CMD}
