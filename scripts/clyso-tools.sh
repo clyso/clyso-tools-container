@@ -3,10 +3,11 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
+    echo "Usage: $0 {-v|--version <ceph_version> | -i|--image <image>} [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
     echo ""
-    echo "Required:"
-    echo "  -v, --version <version>    Ceph version (e.g., 18.2.7)"
+    echo "Required (one of):"
+    echo "  -v, --version <version>    Ceph version (e.g., 18.2.7) - uses harbor.clyso.com image"
+    echo "  -i, --image <image>        Full container image"
     echo ""
     echo "Optional:"
     echo "  -c, --config <path>        Path to ceph.conf (otherwise auto-detected)"
@@ -21,6 +22,7 @@ usage() {
 }
 
 CEPH_VERSION=""
+IMAGE_FLAG=""
 CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
@@ -33,6 +35,10 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -v|--version)
             CEPH_VERSION="$2"
+            shift 2
+            ;;
+        -i|--image)
+            IMAGE_FLAG="$2"
             shift 2
             ;;
         -c|--config)
@@ -74,8 +80,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${CEPH_VERSION}" ]; then
-    echo "Error: --version flag is required"
+if [ -n "${IMAGE_FLAG}" ] && [ -n "${CEPH_VERSION}" ]; then
+    echo "Error: --version and --image are mutually exclusive"
+    usage
+elif [ -z "${IMAGE_FLAG}" ] && [ -z "${CEPH_VERSION}" ]; then
+    echo "Error: --version or --image is required"
     usage
 fi
 
@@ -195,10 +204,12 @@ else
     fi
 fi
 
-echo "Ceph version: ${CEPH_VERSION}"
-
-IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
-echo "Image:           ${IMAGE}"
+if [ -n "${IMAGE_FLAG}" ]; then
+    IMAGE="${IMAGE_FLAG}"
+else
+    IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
+fi
+echo "Image: ${IMAGE}"
 echo ""
 
 # --security-opt apparmor=unconfined is needed for OSDs processes with unwindpmp
