@@ -3,10 +3,11 @@
 set -e
 
 usage() {
-    echo "Usage: $0 -v|--version <ceph_version> [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
+    echo "Usage: $0 {-v|--version <ceph_version> | -i|--image <image>} [-c|--config <config_path>] [-k|--keyring <keyring_path>] [-e|--engine <engine>] [-- <command>]"
     echo ""
-    echo "Required:"
-    echo "  -v, --version <version>    Ceph version (e.g., 18.2.7)"
+    echo "Required (one of):"
+    echo "  -v, --version <version>    Ceph version (e.g., 18.2.7) - uses harbor.clyso.com image"
+    echo "  -i, --image <image>        Full container image"
     echo ""
     echo "Optional:"
     echo "  -c, --config <path>        Path to ceph.conf (otherwise auto-detected)"
@@ -15,22 +16,29 @@ usage() {
     echo "  -d, --debug                Enable debug mode (--pid=host, SYS_PTRACE, SYS_ADMIN, seccomp=unconfined)"
     echo "                             Required for tracing operations (osdtrace, radostrace) on non-admin nodes"
     echo "  -p, --pull                 Pull the latest image before running"
+    echo "  -n, --dry-run              Print the container run command without executing it"
     echo "  -h, --help                 Show this help message"
     exit 1
 }
 
 CEPH_VERSION=""
+IMAGE_FLAG=""
 CONFIG_FLAG=""
 KEYRING_FLAG=""
 ENGINE_FLAG=""
 DEBUG_MODE=false
 PULL_MODE=false
+DRY_RUN=false
 COMMAND_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -v|--version)
             CEPH_VERSION="$2"
+            shift 2
+            ;;
+        -i|--image)
+            IMAGE_FLAG="$2"
             shift 2
             ;;
         -c|--config)
@@ -53,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             PULL_MODE=true
             shift
             ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         -h|--help)
             usage
             ;;
@@ -68,8 +80,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${CEPH_VERSION}" ]; then
-    echo "Error: --version flag is required"
+if [ -n "${IMAGE_FLAG}" ] && [ -n "${CEPH_VERSION}" ]; then
+    echo "Error: --version and --image are mutually exclusive"
+    usage
+elif [ -z "${IMAGE_FLAG}" ] && [ -z "${CEPH_VERSION}" ]; then
+    echo "Error: --version or --image is required"
     usage
 fi
 
@@ -124,15 +139,15 @@ else
 fi
 
 DATA_DIR="/var/lib/ceph"
+FSID=""
 
-FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename || true))
+FSIDS=($(ls -d ${DATA_DIR}/*-*-*-*-* 2>/dev/null | xargs -n1 basename 2>/dev/null || true))
 
-if [ ${#FSIDS[@]} -eq 0 ]; then
-    echo "Error: No FSID found in ${DATA_DIR}"
-    exit 1
-else
+if [ ${#FSIDS[@]} -gt 0 ]; then
     FSID="${FSIDS[0]}"
     echo "Inferred FSID: ${FSID}"
+else
+    echo "No FSID found in ${DATA_DIR}"
 fi
 
 CONFIG=""
@@ -145,7 +160,7 @@ if [ -n "${CONFIG_FLAG}" ]; then
         echo "Error: Provided config file not found: ${CONFIG_FLAG}"
         exit 1
     fi
-elif [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
+elif [ -n "${FSID}" ] && [ -f "${DATA_DIR}/${FSID}/config/ceph.conf" ]; then
     CONFIG="${DATA_DIR}/${FSID}/config/ceph.conf"
     echo "Found config: ${CONFIG}"
 elif [ -f "/etc/ceph/ceph.conf" ]; then
@@ -172,7 +187,7 @@ if [ -n "${KEYRING_FLAG}" ]; then
         echo "Error: Provided keyring file not found: ${KEYRING_FLAG}"
         exit 1
     fi
-elif [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
+elif [ -n "${FSID}" ] && [ -f "${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring" ]; then
     KEYRING="${DATA_DIR}/${FSID}/config/ceph.client.admin.keyring"
     echo "Found keyring: ${KEYRING}"
 elif [ -f "/etc/ceph/ceph.client.admin.keyring" ]; then
@@ -189,10 +204,12 @@ else
     fi
 fi
 
-echo "Ceph version: ${CEPH_VERSION}"
-
-IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
-echo "Image:           ${IMAGE}"
+if [ -n "${IMAGE_FLAG}" ]; then
+    IMAGE="${IMAGE_FLAG}"
+else
+    IMAGE="harbor.clyso.com/clyso-tools/clyso-tools:${CEPH_VERSION}"
+fi
+echo "Image: ${IMAGE}"
 echo ""
 
 # --security-opt apparmor=unconfined is needed for OSDs processes with unwindpmp
@@ -233,7 +250,11 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
   ${VOLUME_MOUNTS} \
-  -v /:/rootfs:ro \
+  -v /:/rootfs:z \
   ${IMAGE} ${TRAILING_ARGS}"
 
-eval ${CONTAINER_CMD}
+if [ "${DRY_RUN}" = true ]; then
+    echo "${CONTAINER_CMD}"
+else
+    eval ${CONTAINER_CMD}
+fi
