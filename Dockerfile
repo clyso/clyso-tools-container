@@ -51,6 +51,7 @@ RUN dnf install -y \
       elfutils-devel \
       glibc-devel \
       glibc-devel.i686 \
+      openssl-devel \
     && dnf clean all
 
 RUN git clone https://github.com/taodd/cephtrace.git /tmp/cephtrace && \
