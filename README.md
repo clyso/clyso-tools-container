@@ -1,8 +1,8 @@
-# clyso-tools-build
+# clyso-tools-container
 
 ## How to use 
 
-There are prebuilt containers for each ceph version and to get a shell
+There are prebuilt containers for each Ceph version and to get a shell.
 
 ```
 ./clyso-tools.sh --version 20.2.0
@@ -15,11 +15,27 @@ $ ./clyso-tools.sh --version 20.2.0 --debug
 
 Inside the container, to access /root filesystem, one can go to /rootfs/root
 
+Available containers for these Ceph versions:
+
+harbor.clyso.com/clyso-tools/clyso-tools:v20.2.0
+harbor.clyso.com/clyso-tools/clyso-tools:v19.2.3
+harbor.clyso.com/clyso-tools/clyso-tools:v18.2.7
+harbor.clyso.com/clyso-tools/clyso-tools:v20.2.1
+harbor.clyso.com/clyso-tools/clyso-tools:v18.2.8
+harbor.clyso.com/clyso-tools/clyso-tools:v19.2.4
+
 ## What is in this container?
 
 clyso specific tools:
 - o8 TUI for ceph
 - otto cli analyzer tool
+- upmap-remapped.py
+
+Inside this container are the added tools we have
+```
+[/usr/local/bin]# ls
+o8  osdtrace  otto  radostrace  unwindpmp upmap-remapped.py
+```
 
 ### wallclock profiler
 

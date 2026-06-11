@@ -97,6 +97,10 @@ RUN dnf install -y \
 
 COPY --from=otto-fetcher /tmp/otto /usr/local/bin/otto
 COPY --from=o8-fetcher /tmp/o8 /usr/local/bin/o8
+
+# Extract bundled toolkit scripts from otto onto the PATH
+RUN otto toolkit echo cern/upmap-remapped.py > /usr/local/bin/upmap-remapped.py && \
+    chmod +x /usr/local/bin/upmap-remapped.py
 COPY --from=uwpmp-builder /tmp/uwpmp/build/unwindpmp /usr/local/bin/unwindpmp
 
 COPY --from=cephtrace-builder /tmp/cephtrace/osdtrace /usr/local/bin/osdtrace
