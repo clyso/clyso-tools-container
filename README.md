@@ -17,12 +17,14 @@ Inside the container, to access /root filesystem, one can go to /rootfs/root
 
 Available containers for these Ceph versions:
 
+```
 harbor.clyso.com/clyso-tools/clyso-tools:v20.2.0
 harbor.clyso.com/clyso-tools/clyso-tools:v19.2.3
 harbor.clyso.com/clyso-tools/clyso-tools:v18.2.7
 harbor.clyso.com/clyso-tools/clyso-tools:v20.2.1
 harbor.clyso.com/clyso-tools/clyso-tools:v18.2.8
 harbor.clyso.com/clyso-tools/clyso-tools:v19.2.4
+```
 
 ## What is in this container?
 
