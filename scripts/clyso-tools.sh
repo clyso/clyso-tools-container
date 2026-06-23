@@ -233,12 +233,30 @@ else
     TRAILING_ARGS=""
 fi
 
+# Persist /root across runs (bash history, dotfiles) by bind-mounting a host
+# home directory onto the container's /root, mirroring `cephadm shell`.
+# cephadm uses ${DATA_DIR}/${FSID}/home and seeds it from /etc/skel on first use.
+HOME_DIR=""
+if [ -n "${FSID}" ]; then
+    HOME_DIR="${DATA_DIR}/${FSID}/home"
+    if [ ! -d "${HOME_DIR}" ]; then
+        mkdir -p "${HOME_DIR}"
+        if [ -d /etc/skel ]; then
+            cp -a /etc/skel/.bash* "${HOME_DIR}/" 2>/dev/null || true
+        fi
+        echo "Created home directory: ${HOME_DIR}"
+    fi
+fi
+
 VOLUME_MOUNTS=""
 if [ -n "${CONFIG}" ]; then
     VOLUME_MOUNTS="${VOLUME_MOUNTS} -v ${CONFIG}:/etc/ceph/ceph.conf:z"
 fi
 if [ -n "${KEYRING}" ]; then
     VOLUME_MOUNTS="${VOLUME_MOUNTS} -v ${KEYRING}:/etc/ceph/ceph.keyring:z"
+fi
+if [ -n "${HOME_DIR}" ]; then
+    VOLUME_MOUNTS="${VOLUME_MOUNTS} -v ${HOME_DIR}:/root:z"
 fi
 
 CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
