@@ -249,6 +249,7 @@ CONTAINER_CMD="${CONTAINER_ENGINE} run ${INTERACTIVE_FLAGS} --rm \
   -e CONTAINER_IMAGE=${IMAGE} \
   -e NODE_NAME=$(hostname) \
   -e LANG=C \
+  -e TERM=xterm-256color \
   ${VOLUME_MOUNTS} \
   -v /:/rootfs:z \
   ${IMAGE} ${TRAILING_ARGS}"
