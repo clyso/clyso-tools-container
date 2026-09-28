@@ -14,9 +14,11 @@ RUN apk add --no-cache curl && \
 FROM alpine:latest AS o8-fetcher
 
 ARG O8_VERSION=latest
+# o8 links librados, so it is published per Ceph version (o8s/<o8 version>/<ceph tag>/o8)
+ARG CEPH_TAG
 
 RUN apk add --no-cache curl && \
-    curl -fsSL -o /tmp/o8 https://s3.clyso.com/o8s/${O8_VERSION}/o8 && \
+    curl -fsSL -o /tmp/o8 https://s3.clyso.com/o8s/${O8_VERSION}/${CEPH_TAG}/o8 && \
     chmod +x /tmp/o8
 
 FROM ${CEPH_IMG}:${CEPH_TAG} AS uwpmp-builder
